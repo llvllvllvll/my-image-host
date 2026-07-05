@@ -6,11 +6,47 @@ const categories = ["全部", "角色图", "参考图", "网站素材"] as const
 const HIDDEN_IMAGE_IDS_KEY = "personal-image-library:hidden-image-ids";
 
 type CategoryFilter = (typeof categories)[number];
+type NewImageCategory = ImageItem["category"];
+
+type NewImageDraft = {
+  title: string;
+  fileName: string;
+  category: NewImageCategory;
+};
 
 function getImageUrl(image: ImageItem) {
   const base = SITE_BASE_URL.replace(/\/$/, "");
   const path = image.path.startsWith("/") ? image.path : `/${image.path}`;
   return `${base}${path}`;
+}
+
+function getImageAssetUrl(image: ImageItem) {
+  const meta = import.meta as ImportMeta & { env?: { BASE_URL?: string } };
+  const base = meta.env?.BASE_URL || "/";
+  return `${base}${image.path.replace(/^\//, "")}`;
+}
+
+function escapeRecordValue(value: string) {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function getImageRecordCode(draft: NewImageDraft) {
+  const safeFileName = draft.fileName.trim() || "your-image.jpg";
+  const fileTitle = safeFileName.replace(/\.[^.]+$/, "");
+  const safeTitle = draft.title.trim() || fileTitle || "your-image-title";
+  const safeId =
+    fileTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "new-image-id";
+
+  return `{
+  id: "${escapeRecordValue(safeId)}",
+  title: "${escapeRecordValue(safeTitle)}",
+  fileName: "${escapeRecordValue(safeFileName)}",
+  category: "${draft.category}",
+  path: "/images/${escapeRecordValue(safeFileName)}",
+}`;
 }
 
 function loadHiddenImageIds() {
@@ -62,6 +98,13 @@ export default function App() {
   const [searchText, setSearchText] = useState("");
   const [previewImage, setPreviewImage] = useState<ImageItem | null>(null);
   const [copyResult, setCopyResult] = useState<{ id: string; ok: boolean } | null>(null);
+  const [recordCopyResult, setRecordCopyResult] = useState<"idle" | "ok" | "error">("idle");
+  const [isRecordHelperOpen, setIsRecordHelperOpen] = useState(false);
+  const [newImageDraft, setNewImageDraft] = useState<NewImageDraft>({
+    title: "",
+    fileName: "",
+    category: "角色图",
+  });
   const [hiddenImageIds, setHiddenImageIds] = useState<string[]>(loadHiddenImageIds);
 
   const hiddenImageIdSet = useMemo(() => new Set(hiddenImageIds), [hiddenImageIds]);
@@ -84,6 +127,8 @@ export default function App() {
       return !isHidden && matchesCategory && matchesSearch;
     });
   }, [activeCategory, hiddenImageIdSet, searchText]);
+
+  const newImageRecordCode = useMemo(() => getImageRecordCode(newImageDraft), [newImageDraft]);
 
   const handleCopy = async (image: ImageItem) => {
     try {
@@ -111,6 +156,17 @@ export default function App() {
   const handleRestoreHiddenImages = () => {
     saveHiddenImageIds([]);
     setHiddenImageIds([]);
+  };
+
+  const handleCopyRecordCode = async () => {
+    try {
+      await copyText(newImageRecordCode);
+      setRecordCopyResult("ok");
+    } catch {
+      setRecordCopyResult("error");
+    }
+
+    window.setTimeout(() => setRecordCopyResult("idle"), 1600);
   };
 
   return (
@@ -162,14 +218,84 @@ export default function App() {
           <strong>轻量管理</strong>
           <p>隐藏只会在当前浏览器移出页面展示，不会删除 GitHub 仓库里的图片文件。</p>
         </div>
-        <button
-          disabled={hiddenImages.length === 0}
-          onClick={handleRestoreHiddenImages}
-          type="button"
-        >
-          恢复隐藏图片
-        </button>
+        <div className="notice-actions">
+          <button onClick={() => setIsRecordHelperOpen((isOpen) => !isOpen)} type="button">
+            添加图片记录
+          </button>
+          <button
+            disabled={hiddenImages.length === 0}
+            onClick={handleRestoreHiddenImages}
+            type="button"
+          >
+            恢复隐藏图片
+          </button>
+        </div>
       </section>
+
+      {isRecordHelperOpen && (
+        <section className="record-helper" aria-label="新增图片记录助手">
+          <div className="helper-copy">
+            <p className="helper-kicker">新增图片说明</p>
+            <h2>添加图片记录</h2>
+            <p>
+              这个助手只生成 `src/data/images.ts` 里的记录代码，不会上传图片，不会读取本地文件，
+              也不会修改 GitHub 仓库。
+            </p>
+            <ol>
+              <li>先把图片文件放到 `public/images/`。</li>
+              <li>再到 `src/data/images.ts` 添加右侧生成的记录。</li>
+              <li>用 GitHub Desktop 提交并 push。</li>
+              <li>GitHub Pages 会自动重新部署并更新页面。</li>
+            </ol>
+          </div>
+          <div className="helper-form">
+            <label>
+              <span>标题 title</span>
+              <input
+                onChange={(event) =>
+                  setNewImageDraft((draft) => ({ ...draft, title: event.target.value }))
+                }
+                placeholder="xia-yunzhi-01"
+                value={newImageDraft.title}
+              />
+            </label>
+            <label>
+              <span>文件名 fileName</span>
+              <input
+                onChange={(event) =>
+                  setNewImageDraft((draft) => ({ ...draft, fileName: event.target.value }))
+                }
+                placeholder="xia-yunzhi-01.jpg"
+                value={newImageDraft.fileName}
+              />
+            </label>
+            <label>
+              <span>分类 category</span>
+              <select
+                onChange={(event) =>
+                  setNewImageDraft((draft) => ({
+                    ...draft,
+                    category: event.target.value as NewImageCategory,
+                  }))
+                }
+                value={newImageDraft.category}
+              >
+                <option value="角色图">角色图</option>
+                <option value="参考图">参考图</option>
+                <option value="网站素材">网站素材</option>
+              </select>
+            </label>
+            <pre>{newImageRecordCode}</pre>
+            <button className="copy-button" onClick={handleCopyRecordCode} type="button">
+              {recordCopyResult === "ok"
+                ? "已复制"
+                : recordCopyResult === "error"
+                  ? "复制失败"
+                  : "复制记录代码"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {filteredImages.length > 0 ? (
         <section className="image-grid" aria-label="图片列表">
@@ -185,7 +311,7 @@ export default function App() {
                   type="button"
                   aria-label={`放大预览 ${image.fileName}`}
                 >
-                  <img alt={image.title} src={image.path} loading="lazy" />
+                  <img alt={image.title} src={getImageAssetUrl(image)} loading="lazy" />
                 </button>
                 <div className="card-body">
                   <div className="card-title-row">
@@ -234,7 +360,7 @@ export default function App() {
                 关闭
               </button>
             </div>
-            <img alt={previewImage.title} src={previewImage.path} />
+            <img alt={previewImage.title} src={getImageAssetUrl(previewImage)} />
           </div>
         </div>
       )}

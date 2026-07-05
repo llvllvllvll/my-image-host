@@ -42,6 +42,12 @@ Vite 构建后，这张图会变成站点里的：
 /images/xia-yunzhi-01.jpg
 ```
 
+部署到 GitHub Pages 项目页后，实际访问地址会带仓库路径，例如：
+
+```txt
+https://llvllvllvll.github.io/my-image-host/images/xia-yunzhi-01.jpg
+```
+
 ## 添加图片信息
 
 打开：
@@ -70,6 +76,30 @@ src/data/images.ts
 - 网站素材
 
 如果要新增分类，需要同时修改 `src/data/images.ts` 里的类型，以及 `src/App.tsx` 里的 `categories`。
+
+## 页面里的新增图片记录助手
+
+页面上有“添加图片记录”入口，可以输入：
+
+- 标题 `title`
+- 文件名 `fileName`
+- 分类 `category`
+
+它会自动生成一段可以粘贴到 `src/data/images.ts` 的记录代码，并支持复制。
+
+这个助手只生成记录代码：
+
+- 不会上传图片。
+- 不会读取你的本地文件。
+- 不会修改 GitHub 仓库。
+- 不会调用 GitHub token、后端、数据库或第三方 API。
+
+完整新增图片流程仍然是：
+
+1. 把图片文件放到 `public/images/`。
+2. 在 `src/data/images.ts` 添加对应图片记录。
+3. 用 GitHub Desktop 提交并 push。
+4. GitHub Pages 自动重新部署后，页面和图片直链会更新。
 
 ## 隐藏图片和真正删除图片
 
